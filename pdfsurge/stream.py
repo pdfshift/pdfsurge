@@ -9,7 +9,7 @@ import io
 
 class StreamReader:
     def __init__(self, stream):
-        if 'b' not in stream.mode:
+        if not isinstance(stream, io.BytesIO) and 'b' not in stream.mode:
             raise PDFSurgeStreamError('Stream object must be opened in binary mode.')
 
         self.stream = stream

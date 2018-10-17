@@ -4,6 +4,7 @@ __pycache__/
 docs/*
 .vscode
 tests/*
+todo.md
 
 # C extensions
 *.so

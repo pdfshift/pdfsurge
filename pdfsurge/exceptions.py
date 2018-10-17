@@ -14,3 +14,7 @@ class PDFSurgeStreamError(PDFSurgeException):
 
 class PDFParserException(PDFSurgeException):
     pass
+
+
+class PDFSurgeDecoderException(PDFSurgeException):
+    pass

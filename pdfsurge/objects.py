@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-from .exceptions import PDFParserException
+from .exceptions import PDFParserException, PDFSurgeStreamError
+from .defines import escaped_dict
+from .decoders import Filters
 from datetime import datetime
 import io, re, codecs
 
@@ -43,6 +45,51 @@ class Parser:
         raise NotImplementedError()
 
 
+class PDFObject(Parser):
+    def __init__(self):
+        self.properties = {}
+        self.stream = None
+        self.data = None
+
+    def get_data(self):
+        if not self.data:
+            filters = self.properties.get('/Filter', None)
+            if filters:
+                if isinstance(filters, str):
+                    filters = (filters, )
+
+                self.data = self.stream
+                for filter in filters:
+                    self.data = Filters.decode(self.data, filter, self.properties.get('/DecodeParms', {}))
+                
+        return self.data
+
+    @classmethod
+    def parse(cls, reader, endobj=True):
+        reader.read_until_char()
+        assert reader.peek(2) == b'<<'
+
+        obj = cls()
+        obj.properties = parse_stream(reader)
+        
+        try:
+            reader.read_until_char()
+            peek = reader.peek(6)
+            if peek == b'stream':
+                # Stream
+                reader.read(6)
+                obj.stream = reader.read_until(b'endstream').strip()
+                reader.read(9)
+                reader.read_until_char()
+
+            if endobj:
+                assert reader.read(6) == b'endobj'
+        except PDFSurgeStreamError:
+            pass
+
+        return obj
+
+
 class ArrayObject(Parser):
     @classmethod
     def parse(cls, reader):
@@ -51,7 +98,6 @@ class ArrayObject(Parser):
     
         assert reader.read(1) == b'['
         while True:
-            reader.read_until_char()
             if reader.peek(1) == b']':
                 reader.seek(1, io.SEEK_CUR) # We pass the "]" char
                 break
@@ -74,7 +120,6 @@ class BooleanObject(Parser):
         
         raise PDFParserException('Unexpected value. Expected Boolean Object.')
 
-
 class DictionaryObject(Parser):
     @classmethod
     def parse(cls, reader):
@@ -84,7 +129,7 @@ class DictionaryObject(Parser):
         while True:
             reader.read_until_char()
             if reader.peek(2) == b'>>':
-                reader.seek(2, io.SEEK_CUR)
+                reader.read(2)
                 break
 
             key = parse_stream(reader, jump=True)
@@ -116,8 +161,9 @@ class NameObject(Parser):
     def parse(cls, reader):
         """ Returns a string starting with "/" """
         assert reader.read(1) == b'/'
-        value = reader.read_until((b' ', b'[', b'(', b'<', b'{', b'%', b'>', b'/'), ignore_eof=True)
+        value = reader.read_until((b' ', b'[', b'(', b'<', b'{', b'%', b'>', b'/', b']', b')', b'}'), ignore_eof=True)
         return '/{0}'.format(value.decode('utf-8'))
+
 
 class NullObject(Parser):
     @classmethod
@@ -156,6 +202,7 @@ class NumericObject(Parser):
             return int(value) * multiplier
 
 
+# @see https://github.com/feliam/miniPDF/blob/4d7b34c74b34838f43f61f64afe76f91899dba27/minipdf/minipdf.py
 class PDFString(bytes):
     def __init__(self, value, hexadecimal=False, utf16=False):
         self.is_hexadecimal = hexadecimal
@@ -243,7 +290,9 @@ class StringObject(Parser):
         if value:
             if value[0:2] == b'D:':
                 value = value[2:].replace(b"'", b'')
-                value = value.replace(b'Z', b'+0000')
+                value = value.replace(b'Z', b'')
+                if len(value) == 14:
+                    value += b'+0000'
                 return datetime.strptime(value.decode('utf-8'), "%Y%m%d%H%M%S%z")
 
         return value
@@ -263,27 +312,4 @@ parsers_objects = {
     b'f': BooleanObject,
     b'(': StringObject,
     b'n': NullObject
-}
-
-escaped_dict = {
-    b'n': b'\n',
-    b'r': b'\r',
-    b't': b'\t',
-    b'b': b'\b',
-    b'f': b'\f',
-    b'c': b'\c',
-    b'(': b'(',
-    b')': b')',
-    b'/': b'/',
-    b'\\': b'\\',
-    b' ': b' ',
-    b'%': b'%',
-    b'<': b'<',
-    b'>': b'>',
-    b'[': b'[',
-    b']': b']',
-    b'#': b'#',
-    b'_': b'_',
-    b'&': b'&',
-    b'$': b'$'
 }

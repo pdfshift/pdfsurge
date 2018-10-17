@@ -1,0 +1,13 @@
+TODO:
+https://blog.didierstevens.com/2008/04/29/pdf-let-me-count-the-ways/
+
+Handle hexadecimal & utf16 for Bytes strings
+
+Document 2.pdf
+/Type/Encoding/Differences
+    => Essayer de grouper toutes les "/Type/Encoding/Differences" ensembles ?
+
+
+For the second line:
+%PDF-1.4
+% 0xE2E3CFD3
